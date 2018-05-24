@@ -16,13 +16,14 @@
 
 package org.springframework.cloud.sample.bookstore.servicebroker.service;
 
+import reactor.core.publisher.Mono;
+
 import org.springframework.cloud.sample.bookstore.servicebroker.model.ServiceInstance;
 import org.springframework.cloud.sample.bookstore.servicebroker.repository.ServiceInstanceRepository;
 import org.springframework.cloud.sample.bookstore.web.service.BookStoreService;
 import org.springframework.cloud.servicebroker.exception.ServiceInstanceDoesNotExistException;
 import org.springframework.cloud.servicebroker.model.instance.CreateServiceInstanceRequest;
 import org.springframework.cloud.servicebroker.model.instance.CreateServiceInstanceResponse;
-import org.springframework.cloud.servicebroker.model.instance.CreateServiceInstanceResponse.CreateServiceInstanceResponseBuilder;
 import org.springframework.cloud.servicebroker.model.instance.DeleteServiceInstanceRequest;
 import org.springframework.cloud.servicebroker.model.instance.DeleteServiceInstanceResponse;
 import org.springframework.cloud.servicebroker.model.instance.GetLastServiceOperationRequest;
@@ -31,14 +32,14 @@ import org.springframework.cloud.servicebroker.model.instance.GetServiceInstance
 import org.springframework.cloud.servicebroker.model.instance.GetServiceInstanceResponse;
 import org.springframework.cloud.servicebroker.model.instance.UpdateServiceInstanceRequest;
 import org.springframework.cloud.servicebroker.model.instance.UpdateServiceInstanceResponse;
-import org.springframework.cloud.servicebroker.service.ServiceInstanceService;
+import org.springframework.cloud.servicebroker.service.reactive.ServiceInstanceService;
 import org.springframework.stereotype.Service;
-
-import java.util.Optional;
 
 @Service
 public class BookStoreServiceInstanceService implements ServiceInstanceService {
+
 	private final BookStoreService storeService;
+
 	private final ServiceInstanceRepository instanceRepository;
 
 	public BookStoreServiceInstanceService(BookStoreService storeService, ServiceInstanceRepository instanceRepository) {
@@ -47,66 +48,64 @@ public class BookStoreServiceInstanceService implements ServiceInstanceService {
 	}
 
 	@Override
-	public CreateServiceInstanceResponse createServiceInstance(CreateServiceInstanceRequest request) {
-		String instanceId = request.getServiceInstanceId();
-
-		CreateServiceInstanceResponseBuilder responseBuilder = CreateServiceInstanceResponse.builder();
-
-		if (instanceRepository.existsById(instanceId)) {
-			responseBuilder.instanceExisted(true);
-		} else {
-			storeService.createBookStore(instanceId);
-
-			saveInstance(request, instanceId);
-		}
-
-		return responseBuilder.build();
+	public Mono<CreateServiceInstanceResponse> createServiceInstance(CreateServiceInstanceRequest request) {
+		return Mono.just(request.getServiceInstanceId())
+				.flatMap(instanceId -> Mono.just(CreateServiceInstanceResponse.builder())
+						.flatMap(responseBuilder -> instanceRepository.existsById(instanceId)
+								.flatMap(exists -> {
+									if (exists) {
+										return Mono.just(responseBuilder.instanceExisted(true))
+												.then(Mono.just(responseBuilder.build()));
+									}
+									else {
+										return storeService.createBookStore(instanceId)
+												.then(saveInstance(request, instanceId))
+												.then(Mono.just(responseBuilder.build()));
+									}
+								})));
 	}
 
 	@Override
-	public GetServiceInstanceResponse getServiceInstance(GetServiceInstanceRequest request) {
-		String instanceId = request.getServiceInstanceId();
-
-		Optional<ServiceInstance> serviceInstance = instanceRepository.findById(instanceId);
-
-		if (serviceInstance.isPresent()) {
-			return GetServiceInstanceResponse.builder()
-					.serviceDefinitionId(serviceInstance.get().getServiceDefinitionId())
-					.planId(serviceInstance.get().getPlanId())
-					.parameters(serviceInstance.get().getParameters())
-					.build();
-		} else {
-			throw new ServiceInstanceDoesNotExistException(instanceId);
-		}
+	public Mono<GetServiceInstanceResponse> getServiceInstance(GetServiceInstanceRequest request) {
+		return Mono.just(request.getServiceInstanceId())
+				.flatMap(instanceId -> instanceRepository.findById(instanceId)
+						.flatMap(serviceInstance -> Mono.just(GetServiceInstanceResponse.builder()
+										.serviceDefinitionId(serviceInstance.getServiceDefinitionId())
+										.planId(serviceInstance.getPlanId())
+										.parameters(serviceInstance.getParameters())
+										.build()))
+						.switchIfEmpty(Mono.error(new ServiceInstanceDoesNotExistException(instanceId))));
 	}
 
 	@Override
-	public GetLastServiceOperationResponse getLastOperation(GetLastServiceOperationRequest request) {
-		return null;
+	public Mono<GetLastServiceOperationResponse> getLastOperation(GetLastServiceOperationRequest request) {
+		return Mono.empty();
 	}
 
 	@Override
-	public DeleteServiceInstanceResponse deleteServiceInstance(DeleteServiceInstanceRequest request) {
-		String instanceId = request.getServiceInstanceId();
-
-		if (instanceRepository.existsById(instanceId)) {
-			storeService.deleteBookStore(instanceId);
-			instanceRepository.deleteById(instanceId);
-
-			return DeleteServiceInstanceResponse.builder().build();
-		} else {
-			throw new ServiceInstanceDoesNotExistException(instanceId);
-		}
+	public Mono<DeleteServiceInstanceResponse> deleteServiceInstance(DeleteServiceInstanceRequest request) {
+		return Mono.just(request.getServiceInstanceId())
+				.flatMap(instanceId -> instanceRepository.existsById(instanceId)
+						.flatMap(exists -> {
+							if (exists) {
+								return storeService.deleteBookStore(instanceId)
+										.then(instanceRepository.deleteById(instanceId))
+										.then(Mono.just(DeleteServiceInstanceResponse.builder().build()));
+							}
+							else {
+								return Mono.error(new ServiceInstanceDoesNotExistException(instanceId));
+							}
+						}));
 	}
 
 	@Override
-	public UpdateServiceInstanceResponse updateServiceInstance(UpdateServiceInstanceRequest request) {
-		return null;
+	public Mono<UpdateServiceInstanceResponse> updateServiceInstance(UpdateServiceInstanceRequest request) {
+		return Mono.empty();
 	}
 
-	private void saveInstance(CreateServiceInstanceRequest request, String instanceId) {
-		ServiceInstance serviceInstance = new ServiceInstance(instanceId, request.getServiceDefinitionId(),
-				request.getPlanId(), request.getParameters());
-		instanceRepository.save(serviceInstance);
+	private Mono<ServiceInstance> saveInstance(CreateServiceInstanceRequest request, String instanceId) {
+		return Mono.just(new ServiceInstance(instanceId, request.getServiceDefinitionId(),
+				request.getPlanId(), request.getParameters()))
+				.flatMap(instanceRepository::save);
 	}
 }

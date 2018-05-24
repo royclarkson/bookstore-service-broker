@@ -20,7 +20,6 @@ import java.util.Collection;
 import java.util.stream.Collectors;
 
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 import org.springframework.cloud.sample.bookstore.web.model.User;
 import org.springframework.cloud.sample.bookstore.web.repository.UserRepository;
@@ -28,12 +27,11 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.ReactiveUserDetailsService;
 import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
 @Service
-public class RepositoryUserDetailsService implements UserDetailsService, ReactiveUserDetailsService {
+public class RepositoryUserDetailsService implements ReactiveUserDetailsService {
 	private final UserRepository userRepository;
 
 	public RepositoryUserDetailsService(UserRepository userRepository) {
@@ -41,20 +39,12 @@ public class RepositoryUserDetailsService implements UserDetailsService, Reactiv
 	}
 
 	@Override
-	public UserDetails loadUserByUsername(String username) {
-		User user = userRepository.findByUsername(username);
-
-		if (user == null) {
-			throw new UsernameNotFoundException(username);
-		}
-
-		return new CustomUserDetails(user);
-	}
-
-	@Override
 	public Mono<UserDetails> findByUsername(String username) {
-		return Mono.fromCallable(() -> loadUserByUsername(username))
-				.subscribeOn(Schedulers.elastic());
+		return userRepository.findByUsername(username)
+				.last()
+				.map(CustomUserDetails::new)
+				.cast(UserDetails.class)
+				.switchIfEmpty(Mono.error(new UsernameNotFoundException(username)));
 	}
 
 	private class CustomUserDetails implements UserDetails {

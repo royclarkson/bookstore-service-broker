@@ -16,20 +16,20 @@
 
 package org.springframework.cloud.sample.bookstore.servicebroker.repository;
 
+import java.util.HashMap;
+
 import org.junit.Test;
 import org.junit.runner.RunWith;
+
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.test.autoconfigure.data.mongo.DataMongoTest;
 import org.springframework.cloud.sample.bookstore.servicebroker.model.ServiceBinding;
 import org.springframework.test.context.junit4.SpringRunner;
-
-import java.util.HashMap;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @RunWith(SpringRunner.class)
-@DataJpaTest
+@DataMongoTest
 public class ServiceBindingRepositoryTests {
 	@Autowired
 	private ServiceBindingRepository repository;
@@ -49,7 +49,8 @@ public class ServiceBindingRepositoryTests {
 	public void save() {
 		ServiceBinding binding = new ServiceBinding("binding-id", parameters, credentials);
 
-		ServiceBinding savedBinding = repository.save(binding);
+		ServiceBinding savedBinding = repository.save(binding)
+				.block();
 
 		assertThat(savedBinding).isEqualToComparingFieldByField(binding);
 	}
@@ -58,11 +59,13 @@ public class ServiceBindingRepositoryTests {
 	public void retrieve() {
 		ServiceBinding binding = new ServiceBinding("binding-id", parameters, credentials);
 
-		repository.save(binding);
+		repository.save(binding)
+				.block();
 
-		Optional<ServiceBinding> foundBinding = repository.findById("binding-id");
+		ServiceBinding foundBinding = repository.findById("binding-id")
+				.block();
 
-		assertThat(foundBinding).isPresent();
-		assertThat(foundBinding.orElse(null)).isEqualToComparingFieldByField(binding);
+		assertThat(foundBinding).isNotNull();
+		assertThat(foundBinding).isEqualToComparingFieldByField(binding);
 	}
 }

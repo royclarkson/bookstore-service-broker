@@ -18,6 +18,8 @@ package org.springframework.cloud.sample.bookstore.web.controller;
 
 import java.util.Map;
 
+import reactor.core.publisher.Mono;
+
 import org.springframework.cloud.sample.bookstore.web.model.BookStore;
 import org.springframework.cloud.sample.bookstore.web.resource.BookStoreResource;
 import org.springframework.cloud.sample.bookstore.web.resource.BookStoreResourceAssembler;
@@ -30,7 +32,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import reactor.core.publisher.Mono;
 
 @RestController
 @RequestMapping("/bookstores")
@@ -44,17 +45,17 @@ public class BookStoreController extends BaseController {
 	@GetMapping("/{bookStoreId}")
 	@PreAuthorize("hasAnyRole('ROLE_FULL_ACCESS','ROLE_READ_ONLY') and hasPermission(#bookStoreId, '')")
 	public Mono<ResponseEntity<BookStoreResource>> getBooks(@PathVariable String bookStoreId) {
-		BookStore bookStore = bookStoreService.getBookStore(bookStoreId);
-		return createResponse(bookStore);
+		return bookStoreService.getBookStore(bookStoreId)
+				.flatMap(this::createResponse);
 	}
 
 	@ExceptionHandler(IllegalArgumentException.class)
-	public ResponseEntity<Map<String, String>> badBookStoreId(IllegalArgumentException e) {
+	public Mono<ResponseEntity<Map<String, String>>> badBookStoreId(IllegalArgumentException e) {
 		return super.badBookStoreId(e);
 	}
 
 	private Mono<ResponseEntity<BookStoreResource>> createResponse(BookStore bookStore) {
-		BookStoreResource bookStoreResource = new BookStoreResourceAssembler().toResource(bookStore);
-		return Mono.just(new ResponseEntity<>(bookStoreResource, HttpStatus.OK));
+		return new BookStoreResourceAssembler().toResource(bookStore)
+				.map(bookStoreResource -> new ResponseEntity<>(bookStoreResource, HttpStatus.OK));
 	}
 }

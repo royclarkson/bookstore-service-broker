@@ -16,29 +16,21 @@
 
 package org.springframework.cloud.sample.bookstore.web.model;
 
-import org.springframework.hateoas.Identifiable;
-
-import javax.persistence.CollectionTable;
-import javax.persistence.Column;
-import javax.persistence.ElementCollection;
-import javax.persistence.Entity;
-import javax.persistence.FetchType;
-import javax.persistence.Id;
-import javax.persistence.JoinColumn;
-import javax.persistence.Table;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
-@Entity
-@Table(name = "bookstores")
+import reactor.core.publisher.Mono;
+
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.hateoas.Identifiable;
+
+@Document
 public class BookStore implements Identifiable<String> {
-	@Id
-	@Column(length = 50)
-	private final String id;
 
-	@ElementCollection(fetch = FetchType.EAGER)
-	@CollectionTable(name = "books", joinColumns = @JoinColumn(name = "bookstore_id"))
+	@Id
+	private final String id;
+	
 	private final List<Book> books = new ArrayList<>();
 
 	@SuppressWarnings("unused")
@@ -63,17 +55,18 @@ public class BookStore implements Identifiable<String> {
 		books.add(book);
 	}
 
-	public Optional<Book> getBookById(String bookId) {
-		return books.stream()
+	public Mono<Book> getBookById(String bookId) {
+		return Mono.just(books.stream()
 				.filter(book -> book.getId().equals(bookId))
-				.findFirst();
+				.findFirst())
+				.flatMap(Mono::justOrEmpty);
 	}
 
-	public Optional<Book> remove(String bookId) {
-		Optional<Book> book = getBookById(bookId);
-
-		book.ifPresent(books::remove);
-
-		return book;
+	public Mono<Book> remove(String bookId) {
+		return getBookById(bookId)
+				.map(book -> {
+					books.remove(book);
+					return book;
+				});
 	}
 }

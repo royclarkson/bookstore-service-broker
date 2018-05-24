@@ -18,7 +18,6 @@ package org.springframework.cloud.sample.bookstore.web.integration;
 
 import java.nio.charset.Charset;
 import java.util.List;
-import java.util.Optional;
 
 import com.jayway.jsonpath.JsonPath;
 import org.junit.Before;
@@ -26,7 +25,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.cloud.sample.bookstore.web.controller.BookController;
 import org.springframework.cloud.sample.bookstore.web.controller.BookStoreController;
 import org.springframework.cloud.sample.bookstore.web.model.Book;
@@ -44,7 +43,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 
 @RunWith(SpringRunner.class)
-@DataJpaTest
+//@DataMongoTest
+//@WebFluxTest
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 public class BookStoreIntegrationTests {
 
 	private static final Charset UTF_8 = Charset.forName("UTF-8");
@@ -64,11 +65,14 @@ public class BookStoreIntegrationTests {
 		this.client = WebTestClient.bindToController(bookStoreController, bookController)
 				.build();
 
-		BookStore bookStore = service.createBookStore();
+		BookStore bookStore = service.createBookStore()
+				.block();
 		service.putBookInStore(bookStore.getId(),
-				new Book("978-1617292545", "Spring Boot in Action", "Craig Walls"));
+				new Book("978-1617292545", "Spring Boot in Action", "Craig Walls"))
+				.block();
 		service.putBookInStore(bookStore.getId(),
-				new Book("978-1784393021", "Learning Spring Boot", "Greg L. Turnquist"));
+				new Book("978-1784393021", "Learning Spring Boot", "Greg L. Turnquist"))
+				.block();
 		this.bookStoreId = bookStore.getId();
 	}
 
@@ -138,7 +142,8 @@ public class BookStoreIntegrationTests {
 				.expectBody()
 				.consumeWith(result -> verifyBook(result, bookStore.getId(), "", "978-1785284151"));
 
-		assertThat(getBooksFromRepository()).size().isEqualTo(3);
+		List<Book> books = getBooksFromRepository();
+		assertThat(books).size().isEqualTo(3);
 	}
 
 	@Test
@@ -180,13 +185,14 @@ public class BookStoreIntegrationTests {
 	}
 
 	private BookStore getBookStoreFromRepository() {
-		Optional<BookStore> bookStore = repository.findById(bookStoreId);
+		BookStore bookStore = repository.findById(bookStoreId)
+				.block();
 
-		if (!bookStore.isPresent()) {
+		if (bookStore == null) {
 			fail("bookstore not found in repository");
 		}
 
-		return bookStore.get();
+		return bookStore;
 	}
 
 	private String buildBookStoreRef(String bookStoreId) {

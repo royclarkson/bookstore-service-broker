@@ -31,6 +31,7 @@ public class UserApplicationListener implements ApplicationListener<ApplicationR
 
 	@Override
 	public void onApplicationEvent(ApplicationReadyEvent event) {
-		userService.initializeUsers();
+		userService.initializeUsers()
+				.block();
 	}
 }

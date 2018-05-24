@@ -16,66 +16,65 @@
 
 package org.springframework.cloud.sample.bookstore.web.service;
 
+import java.util.UUID;
+
+import reactor.core.publisher.Mono;
+
 import org.springframework.cloud.sample.bookstore.web.model.Book;
 import org.springframework.cloud.sample.bookstore.web.model.BookStore;
 import org.springframework.cloud.sample.bookstore.web.repository.BookStoreRepository;
 import org.springframework.stereotype.Service;
 
-import java.util.Optional;
-import java.util.UUID;
-
 @Service
 public class BookStoreService {
-	private BookStoreRepository repository;
+
+	private final BookStoreRepository repository;
 
 	public BookStoreService(BookStoreRepository bookStoreRepository) {
 		this.repository = bookStoreRepository;
 	}
 
-	public BookStore createBookStore(String storeId) {
-		BookStore bookStore = new BookStore(storeId);
-
-		return repository.save(bookStore);
+	public Mono<BookStore> createBookStore(String storeId) {
+		return repository.save(new BookStore(storeId));
 	}
 
-	public BookStore createBookStore() {
-		return createBookStore(generateRandomId());
+	public Mono<BookStore> createBookStore() {
+		return generateRandomId()
+				.flatMap(this::createBookStore);
 	}
 
-	public BookStore getBookStore(String storeId) {
-		Optional<BookStore> store = repository.findById(storeId);
-		return store.orElseThrow(() -> new IllegalArgumentException("Invalid book store ID " + storeId + "."));
+	public Mono<BookStore> getBookStore(String storeId) {
+		return repository.findById(storeId);
 	}
 
-	public void deleteBookStore(String id) {
-		repository.deleteById(id);
+	public Mono<Void> deleteBookStore(String id) {
+		return repository.deleteById(id);
 	}
 
-	public Book putBookInStore(String storeId, Book book) {
-		String bookId = generateRandomId();
-		Book bookWithId = new Book(bookId, book);
-
-		BookStore store = getBookStore(storeId);
-		store.addBook(bookWithId);
-
-		repository.save(store);
-
-		return bookWithId;
+	public Mono<Book> putBookInStore(String storeId, Book book) {
+		return generateRandomId()
+				.map(bookId -> new Book(bookId, book))
+				.flatMap(bookWithId -> getBookStore(storeId)
+					.map(store -> {
+						store.addBook(bookWithId);
+						return repository.save(store);
+					})
+					.then(Mono.just(bookWithId)));
 	}
 
-	public Book getBookFromStore(String storeId, String bookId) {
-		BookStore store = getBookStore(storeId);
-		return store.getBookById(bookId)
-				.orElseThrow(() -> new IllegalArgumentException("Invalid book ID " + storeId + ":" + bookId + "."));
+	public Mono<Book> getBookFromStore(String storeId, String bookId) {
+		return getBookStore(storeId)
+				.flatMap(store -> store.getBookById(bookId))
+				.switchIfEmpty(Mono.error(new IllegalArgumentException("Invalid book ID " + storeId + ":" + bookId + ".")));
 	}
 
-	public Book removeBookFromStore(String storeId, String bookId) {
-		BookStore store = getBookStore(storeId);
-		return store.remove(bookId)
-				.orElseThrow(() -> new IllegalArgumentException("Invalid book ID " + storeId + ":" + bookId + "."));
+	public Mono<Book> removeBookFromStore(String storeId, String bookId) {
+		return getBookStore(storeId)
+				.flatMap(store -> store.remove(bookId))
+				.switchIfEmpty(Mono.error(new IllegalArgumentException("Invalid book ID " + storeId + ":" + bookId + ".")));
 	}
 
-	private String generateRandomId() {
-		return UUID.randomUUID().toString();
+	private Mono<String> generateRandomId() {
+		return Mono.just(UUID.randomUUID().toString());
 	}
 }

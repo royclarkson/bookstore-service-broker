@@ -16,13 +16,15 @@
 
 package org.springframework.cloud.sample.bookstore.web.service;
 
+import java.security.SecureRandom;
+
+import reactor.core.publisher.Mono;
+
 import org.springframework.cloud.sample.bookstore.web.model.User;
 import org.springframework.cloud.sample.bookstore.web.repository.UserRepository;
 import org.springframework.cloud.sample.bookstore.web.security.SecurityAuthorities;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-
-import java.security.SecureRandom;
 
 @Service
 public class UserService {
@@ -40,38 +42,43 @@ public class UserService {
 		this.passwordEncoder = passwordEncoder;
 	}
 
-	public void initializeUsers() {
-		if (userRepository.count() == 0) {
-			userRepository.save(adminUser());
-		}
+	public Mono<Void> initializeUsers() {
+		return userRepository.count()
+				.map(count -> {
+					if (count > 0) {
+						return adminUser()
+								.flatMap(user -> userRepository.save(user));
+					}
+					return Mono.empty();
+				})
+				.then();
 	}
 
-	public User createUser(String username, String... authorities) {
-		String password = generatePassword();
-		String encodedPassword = passwordEncoder.encode(password);
-
-		userRepository.save(new User(username, encodedPassword, authorities));
-
-		return new User(username, password, authorities);
+	public Mono<User> createUser(String username, String... authorities) {
+		return generatePassword()
+				.flatMap(password -> Mono.fromCallable(() -> passwordEncoder.encode(password))
+						.flatMap(encodedPassword ->
+								userRepository.save(new User(username, encodedPassword, authorities))));
 	}
 
-	public void deleteUser(String username) {
-		User user = userRepository.findByUsername(username);
-		if (user != null) {
-			userRepository.deleteById(user.getId());
-		}
+	public Mono<Void> deleteUser(String username) {
+		return userRepository.findByUsername(username)
+				.last()
+				.flatMap(user -> userRepository.deleteById(user.getId()));
 	}
 
-	private User adminUser() {
-		return new User("admin", passwordEncoder.encode("supersecret"),
-				SecurityAuthorities.ADMIN, SecurityAuthorities.FULL_ACCESS);
+	private Mono<User> adminUser() {
+		return Mono.just(new User("admin", passwordEncoder.encode("supersecret"),
+				SecurityAuthorities.ADMIN, SecurityAuthorities.FULL_ACCESS));
 	}
 
-	private String generatePassword() {
-		StringBuilder sb = new StringBuilder(PASSWORD_LENGTH);
-		for (int i = 0; i < PASSWORD_LENGTH; i++) {
-			sb.append(PASSWORD_CHARS.charAt(RANDOM.nextInt(PASSWORD_CHARS.length())));
-		}
-		return sb.toString();
+	private Mono<String> generatePassword() {
+		return Mono.just(new StringBuilder(PASSWORD_LENGTH))
+				.map(stringBuilder -> {
+					for (int i = 0; i < PASSWORD_LENGTH; i++) {
+						stringBuilder.append(PASSWORD_CHARS.charAt(RANDOM.nextInt(PASSWORD_CHARS.length())));
+					}
+					return stringBuilder.toString();
+				});
 	}
 }

@@ -16,13 +16,18 @@
 
 package org.springframework.cloud.sample.bookstore.servicebroker.service;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
-import org.springframework.cloud.sample.bookstore.web.model.ApplicationInformation;
+import reactor.core.publisher.Mono;
+
 import org.springframework.cloud.sample.bookstore.servicebroker.model.ServiceBinding;
 import org.springframework.cloud.sample.bookstore.servicebroker.repository.ServiceBindingRepository;
+import org.springframework.cloud.sample.bookstore.web.model.ApplicationInformation;
 import org.springframework.cloud.sample.bookstore.web.model.User;
 import org.springframework.cloud.sample.bookstore.web.service.UserService;
 import org.springframework.cloud.servicebroker.exception.ServiceInstanceBindingDoesNotExistException;
@@ -34,11 +39,9 @@ import org.springframework.cloud.servicebroker.model.binding.GetServiceInstanceA
 import org.springframework.cloud.servicebroker.model.binding.GetServiceInstanceBindingRequest;
 import org.springframework.cloud.servicebroker.model.binding.GetServiceInstanceBindingResponse;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
-
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
@@ -76,18 +79,22 @@ public class BookstoreServiceInstanceBindingServiceTests {
 
 	@Test
 	public void createBindingWhenBindingDoesNotExist() {
-		when(repository.findById(SERVICE_BINDING_ID))
-				.thenReturn(Optional.empty());
+		when(repository.existsById(SERVICE_BINDING_ID))
+				.thenReturn(Mono.just(false));
 
 		when(userService.createUser(SERVICE_BINDING_ID, FULL_ACCESS, BOOK_STORE_ID_PREFIX + SERVICE_INSTANCE_ID))
-			.thenReturn(new User(SERVICE_BINDING_ID, "password", FULL_ACCESS, BOOK_STORE_ID_PREFIX + SERVICE_INSTANCE_ID));
+				.thenReturn(Mono.just(new User(SERVICE_BINDING_ID, "password", FULL_ACCESS, BOOK_STORE_ID_PREFIX + SERVICE_INSTANCE_ID)));
+
+		when(repository.save(any(ServiceBinding.class)))
+				.thenReturn(Mono.just(new ServiceBinding(SERVICE_BINDING_ID, null, credentials)));
 
 		CreateServiceInstanceBindingRequest request = CreateServiceInstanceBindingRequest.builder()
 				.serviceInstanceId(SERVICE_INSTANCE_ID)
 				.bindingId(SERVICE_BINDING_ID)
 				.build();
 
-		CreateServiceInstanceBindingResponse response = service.createServiceInstanceBinding(request);
+		CreateServiceInstanceBindingResponse response = service.createServiceInstanceBinding(request)
+				.block();
 
 		assertThat(response).isInstanceOf(CreateServiceInstanceAppBindingResponse.class);
 
@@ -103,7 +110,7 @@ public class BookstoreServiceInstanceBindingServiceTests {
 			.startsWith(BASE_URL)
 			.endsWith("bookstores/" + SERVICE_INSTANCE_ID);
 
-		verify(repository).findById(SERVICE_BINDING_ID);
+		verify(repository).existsById(SERVICE_BINDING_ID);
 
 		ArgumentCaptor<ServiceBinding> repositoryCaptor = ArgumentCaptor.forClass(ServiceBinding.class);
 		verify(repository).save(repositoryCaptor.capture());
@@ -116,17 +123,21 @@ public class BookstoreServiceInstanceBindingServiceTests {
 
 	@Test
 	public void createBindingWhenBindingExists() {
+		when(repository.existsById(SERVICE_BINDING_ID))
+				.thenReturn(Mono.just(true));
+
 		ServiceBinding binding = new ServiceBinding(SERVICE_BINDING_ID, null, credentials);
 
-		when(repository.findById(SERVICE_BINDING_ID))
-				.thenReturn(Optional.of(binding));
+		when(repository.findById(anyString()))
+				.thenReturn(Mono.just(binding));
 
 		CreateServiceInstanceBindingRequest request = CreateServiceInstanceBindingRequest.builder()
 				.serviceInstanceId(SERVICE_INSTANCE_ID)
 				.bindingId(SERVICE_BINDING_ID)
 				.build();
 
-		CreateServiceInstanceBindingResponse response = service.createServiceInstanceBinding(request);
+		CreateServiceInstanceBindingResponse response = service.createServiceInstanceBinding(request)
+				.block();
 
 		assertThat(response).isInstanceOf(CreateServiceInstanceAppBindingResponse.class);
 
@@ -135,6 +146,7 @@ public class BookstoreServiceInstanceBindingServiceTests {
 
 		assertThat(credentials).isEqualTo(appResponse.getCredentials());
 
+		verify(repository).existsById(SERVICE_BINDING_ID);
 		verify(repository).findById(SERVICE_BINDING_ID);
 		verifyNoMoreInteractions(repository);
 	}
@@ -145,13 +157,14 @@ public class BookstoreServiceInstanceBindingServiceTests {
 		ServiceBinding serviceBinding = new ServiceBinding(SERVICE_BINDING_ID, parameters, credentials);
 
 		when(repository.findById(SERVICE_BINDING_ID))
-				.thenReturn(Optional.of(serviceBinding));
+				.thenReturn(Mono.just(serviceBinding));
 
 		GetServiceInstanceBindingRequest request = GetServiceInstanceBindingRequest.builder()
 				.bindingId(SERVICE_BINDING_ID)
 				.build();
 
-		GetServiceInstanceBindingResponse response = service.getServiceInstanceBinding(request);
+		GetServiceInstanceBindingResponse response = service.getServiceInstanceBinding(request)
+				.block();
 
 		assertThat(response).isInstanceOf(GetServiceInstanceAppBindingResponse.class);
 
@@ -167,26 +180,34 @@ public class BookstoreServiceInstanceBindingServiceTests {
 	@Test(expected = ServiceInstanceBindingDoesNotExistException.class)
 	public void getBindingWhenBindingDoesNotExist() {
 		when(repository.findById(SERVICE_BINDING_ID))
-				.thenReturn(Optional.empty());
+				.thenReturn(Mono.empty());
 
 		GetServiceInstanceBindingRequest request = GetServiceInstanceBindingRequest.builder()
 				.bindingId(SERVICE_BINDING_ID)
 				.build();
 
-		service.getServiceInstanceBinding(request);
+		service.getServiceInstanceBinding(request)
+				.block();
 	}
 
 	@Test
 	public void deleteBindingWhenBindingExists() {
 		when(repository.existsById(SERVICE_BINDING_ID))
-				.thenReturn(true);
+				.thenReturn(Mono.just(true));
+
+		when(repository.deleteById(SERVICE_BINDING_ID))
+				.thenReturn(Mono.empty());
+
+		when(userService.deleteUser(SERVICE_BINDING_ID))
+				.thenReturn(Mono.empty());
 
 		DeleteServiceInstanceBindingRequest request = DeleteServiceInstanceBindingRequest.builder()
 				.serviceInstanceId(SERVICE_INSTANCE_ID)
 				.bindingId(SERVICE_BINDING_ID)
 				.build();
 
-		service.deleteServiceInstanceBinding(request);
+		service.deleteServiceInstanceBinding(request)
+				.block();
 
 		verify(repository).existsById(SERVICE_BINDING_ID);
 		verify(repository).deleteById(SERVICE_BINDING_ID);
@@ -199,13 +220,14 @@ public class BookstoreServiceInstanceBindingServiceTests {
 	@Test(expected = ServiceInstanceBindingDoesNotExistException.class)
 	public void deleteBindingWhenBindingDoesNotExist() {
 		when(repository.existsById(SERVICE_BINDING_ID))
-				.thenReturn(false);
+				.thenReturn(Mono.just(false));
 
 		DeleteServiceInstanceBindingRequest request = DeleteServiceInstanceBindingRequest.builder()
 				.serviceInstanceId(SERVICE_INSTANCE_ID)
 				.bindingId(SERVICE_BINDING_ID)
 				.build();
 
-		service.deleteServiceInstanceBinding(request);
+		service.deleteServiceInstanceBinding(request)
+				.block();
 	}
 }

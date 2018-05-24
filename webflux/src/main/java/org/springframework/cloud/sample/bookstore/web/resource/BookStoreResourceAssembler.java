@@ -16,23 +16,26 @@
 
 package org.springframework.cloud.sample.bookstore.web.resource;
 
+import reactor.core.publisher.Mono;
+
 import org.springframework.cloud.sample.bookstore.web.controller.BookStoreController;
 import org.springframework.cloud.sample.bookstore.web.model.BookStore;
-
-import java.util.List;
 
 import static org.springframework.hateoas.mvc.ControllerLinkBuilder.linkTo;
 
 public class BookStoreResourceAssembler {
-	public BookStoreResource toResource(BookStore bookStore) {
-		BookResourceAssembler bookAssembler = new BookResourceAssembler();
-		List<BookResource> bookResources = bookAssembler.toResources(bookStore.getBooks(), bookStore.getId());
 
-		BookStoreResource bookStoreResource = new BookStoreResource(bookResources);
-		bookStoreResource.add(
-				linkTo(BookStoreController.class)
-						.slash(bookStore.getId())
-						.withSelfRel());
-		return bookStoreResource;
+	public Mono<BookStoreResource> toResource(BookStore bookStore) {
+		return Mono.just(new BookResourceAssembler())
+				.flatMap(bookAssembler -> bookAssembler.toResources(bookStore.getBooks(), bookStore.getId()))
+				.map(BookStoreResource::new)
+				.flatMap(bookStoreResource -> {
+					bookStoreResource.add(
+							linkTo(BookStoreController.class)
+									.slash(bookStore.getId())
+									.withSelfRel());
+					return Mono.just(bookStoreResource);
+				});
 	}
+
 }

@@ -16,14 +16,19 @@
 
 package org.springframework.cloud.sample.bookstore.servicebroker.service;
 
+import java.util.HashMap;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
+import reactor.core.publisher.Mono;
+
 import org.springframework.cloud.sample.bookstore.servicebroker.model.ServiceInstance;
 import org.springframework.cloud.sample.bookstore.servicebroker.repository.ServiceInstanceRepository;
+import org.springframework.cloud.sample.bookstore.web.model.BookStore;
 import org.springframework.cloud.sample.bookstore.web.service.BookStoreService;
 import org.springframework.cloud.servicebroker.exception.ServiceInstanceDoesNotExistException;
 import org.springframework.cloud.servicebroker.model.Context;
@@ -34,10 +39,8 @@ import org.springframework.cloud.servicebroker.model.instance.DeleteServiceInsta
 import org.springframework.cloud.servicebroker.model.instance.GetServiceInstanceRequest;
 import org.springframework.cloud.servicebroker.model.instance.GetServiceInstanceResponse;
 
-import java.util.HashMap;
-import java.util.Optional;
-
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyZeroInteractions;
@@ -49,10 +52,10 @@ public class BookstoreServiceInstanceServiceTests {
 	private static final String SERVICE_INSTANCE_ID = "instance-id";
 
 	@Mock
-	private BookStoreService store;
+	private ServiceInstanceRepository repository;
 
 	@Mock
-	private ServiceInstanceRepository repository;
+	private BookStoreService store;
 
 	private BookStoreServiceInstanceService service;
 
@@ -66,13 +69,14 @@ public class BookstoreServiceInstanceServiceTests {
 	@Test
 	public void createServiceInstanceWhenInstanceExists() {
 		when(repository.existsById(SERVICE_INSTANCE_ID))
-				.thenReturn(true);
+				.thenReturn(Mono.just(true));
 
 		CreateServiceInstanceRequest request = CreateServiceInstanceRequest.builder()
 				.serviceInstanceId(SERVICE_INSTANCE_ID)
 				.build();
 
-		CreateServiceInstanceResponse response = service.createServiceInstance(request);
+		CreateServiceInstanceResponse response = service.createServiceInstance(request)
+				.block();
 
 		assertThat(response.isInstanceExisted()).isTrue();
 		assertThat(response.getDashboardUrl()).isNull();
@@ -92,14 +96,26 @@ public class BookstoreServiceInstanceServiceTests {
 				.build();
 
 		when(repository.existsById(SERVICE_INSTANCE_ID))
-				.thenReturn(false);
+				.thenReturn(Mono.just(false));
+
+		BookStore bookStore = new BookStore(SERVICE_INSTANCE_ID);
+
+		when(store.createBookStore(SERVICE_INSTANCE_ID))
+				.thenReturn(Mono.just(bookStore));
+
+		ServiceInstance serviceInstance = new ServiceInstance(SERVICE_INSTANCE_ID,
+				null, null, null);
+
+		when(repository.save(any(ServiceInstance.class)))
+				.thenReturn(Mono.just(serviceInstance));
 
 		CreateServiceInstanceRequest request = CreateServiceInstanceRequest.builder()
 				.serviceInstanceId(SERVICE_INSTANCE_ID)
 				.context(context)
 				.build();
 
-		CreateServiceInstanceResponse response = service.createServiceInstance(request);
+		CreateServiceInstanceResponse response = service.createServiceInstance(request)
+				.block();
 
 		assertThat(response.isInstanceExisted()).isFalse();
 		assertThat(response.getDashboardUrl()).isNull();
@@ -124,13 +140,14 @@ public class BookstoreServiceInstanceServiceTests {
 				"plan-id", new HashMap<>());
 
 		when(repository.findById(SERVICE_INSTANCE_ID))
-				.thenReturn(Optional.of(serviceInstance));
+				.thenReturn(Mono.just(serviceInstance));
 
 		GetServiceInstanceRequest request = GetServiceInstanceRequest.builder()
 				.serviceInstanceId(SERVICE_INSTANCE_ID)
 				.build();
 
-		GetServiceInstanceResponse response = service.getServiceInstance(request);
+		GetServiceInstanceResponse response = service.getServiceInstance(request)
+				.block();
 
 		assertThat(response.getServiceDefinitionId()).isEqualTo(serviceInstance.getServiceDefinitionId());
 		assertThat(response.getPlanId()).isEqualTo(serviceInstance.getPlanId());
@@ -143,25 +160,33 @@ public class BookstoreServiceInstanceServiceTests {
 	@Test(expected = ServiceInstanceDoesNotExistException.class)
 	public void getServiceInstanceWhenInstanceDoesNotExists() {
 		when(repository.findById(SERVICE_INSTANCE_ID))
-				.thenReturn(Optional.empty());
+				.thenReturn(Mono.empty());
 
 		GetServiceInstanceRequest request = GetServiceInstanceRequest.builder()
 				.serviceInstanceId(SERVICE_INSTANCE_ID)
 				.build();
 
-		service.getServiceInstance(request);
+		service.getServiceInstance(request)
+			.block();
 	}
 
 	@Test
 	public void deleteServiceInstanceWhenInstanceExists() {
 		when(repository.existsById(SERVICE_INSTANCE_ID))
-				.thenReturn(true);
+				.thenReturn(Mono.just(true));
+
+		when(repository.deleteById(SERVICE_INSTANCE_ID))
+				.thenReturn(Mono.empty());
+
+		when(store.deleteBookStore(SERVICE_INSTANCE_ID))
+				.thenReturn(Mono.empty());
 
 		DeleteServiceInstanceRequest request = DeleteServiceInstanceRequest.builder()
 				.serviceInstanceId(SERVICE_INSTANCE_ID)
 				.build();
 
-		DeleteServiceInstanceResponse response = service.deleteServiceInstance(request);
+		DeleteServiceInstanceResponse response = service.deleteServiceInstance(request)
+				.block();
 
 		assertThat(response.isAsync()).isFalse();
 		assertThat(response.getOperation()).isNull();
@@ -177,12 +202,13 @@ public class BookstoreServiceInstanceServiceTests {
 	@Test(expected = ServiceInstanceDoesNotExistException.class)
 	public void deleteServiceInstanceWhenInstanceDoesNotExist() {
 		when(repository.existsById(SERVICE_INSTANCE_ID))
-				.thenReturn(false);
+				.thenReturn(Mono.just(false));
 
 		DeleteServiceInstanceRequest request = DeleteServiceInstanceRequest.builder()
 				.serviceInstanceId(SERVICE_INSTANCE_ID)
 				.build();
 
-		service.deleteServiceInstance(request);
+		service.deleteServiceInstance(request)
+			.block();
 	}
 }

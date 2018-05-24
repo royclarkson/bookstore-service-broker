@@ -16,7 +16,7 @@
 
 buildscript {
 	ext {
-		springBootVersion = '2.0.1.RELEASE'
+		springBootVersion = '2.0.2.RELEASE'
 	}
 	repositories {
 		mavenCentral()
@@ -43,23 +43,20 @@ sourceCompatibility = 1.8
 
 repositories {
 	mavenCentral()
+	maven { url "https://repo.spring.io/release" }
 	maven { url "https://repo.spring.io/milestone" }
+	mavenLocal()
 }
 
 dependencies {
 	compile('org.springframework.boot:spring-boot-starter-webflux')
 	compile('org.springframework.boot:spring-boot-starter-actuator')
 	compile('org.springframework.boot:spring-boot-starter-security')
+	compile('org.springframework.boot:spring-boot-starter-data-mongodb-reactive')
+	compile('de.flapdoodle.embed:de.flapdoodle.embed.mongo')
 	compile('org.springframework.hateoas:spring-hateoas:0.24.0.RELEASE')
-
+	compile('org.springframework.cloud:spring-cloud-starter-open-service-broker-webflux:2.0.0.BUILD-SNAPSHOT')
 	runtime('org.springframework.boot:spring-boot-devtools')
-
-	compile('org.springframework.cloud:spring-cloud-starter-open-service-broker-webflux:2.0.0.RC1')
-
-	compile('org.springframework.boot:spring-boot-starter-data-jpa')
-	runtime('org.hsqldb:hsqldb')
-	runtime('mysql:mysql-connector-java')
-
 	testCompile('org.springframework.boot:spring-boot-starter-test')
 	testCompile('org.springframework.security:spring-security-test')
 	testCompile('org.assertj:assertj-core')
