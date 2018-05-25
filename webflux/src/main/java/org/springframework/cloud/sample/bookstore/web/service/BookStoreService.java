@@ -39,8 +39,7 @@ public class BookStoreService {
 	}
 
 	public Mono<BookStore> createBookStore() {
-		return generateRandomId()
-				.flatMap(this::createBookStore);
+		return createBookStore(generateRandomId());
 	}
 
 	public Mono<BookStore> getBookStore(String storeId) {
@@ -52,14 +51,11 @@ public class BookStoreService {
 	}
 
 	public Mono<Book> putBookInStore(String storeId, Book book) {
-		return generateRandomId()
-				.map(bookId -> new Book(bookId, book))
-				.flatMap(bookWithId -> getBookStore(storeId)
-					.map(store -> {
-						store.addBook(bookWithId);
-						return repository.save(store);
-					})
-					.then(Mono.just(bookWithId)));
+		return  getBookStore(storeId)
+				.flatMap(store -> Mono.just(new Book(generateRandomId(), book))
+					.flatMap(bookWithId -> store.addBook(bookWithId)
+							.then(repository.save(store))
+							.thenReturn(bookWithId)));
 	}
 
 	public Mono<Book> getBookFromStore(String storeId, String bookId) {
@@ -70,11 +66,14 @@ public class BookStoreService {
 
 	public Mono<Book> removeBookFromStore(String storeId, String bookId) {
 		return getBookStore(storeId)
-				.flatMap(store -> store.remove(bookId))
+				.flatMap(store -> getBookFromStore(storeId, bookId)
+						.flatMap(book -> store.remove(bookId)
+								.then(repository.save(store))
+								.thenReturn(book)))
 				.switchIfEmpty(Mono.error(new IllegalArgumentException("Invalid book ID " + storeId + ":" + bookId + ".")));
 	}
 
-	private Mono<String> generateRandomId() {
-		return Mono.just(UUID.randomUUID().toString());
+	private String generateRandomId() {
+		return UUID.randomUUID().toString();
 	}
 }

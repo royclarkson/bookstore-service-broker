@@ -23,9 +23,10 @@ import com.jayway.jsonpath.JsonPath;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import reactor.core.publisher.Mono;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.autoconfigure.data.mongo.DataMongoTest;
 import org.springframework.cloud.sample.bookstore.web.controller.BookController;
 import org.springframework.cloud.sample.bookstore.web.controller.BookStoreController;
 import org.springframework.cloud.sample.bookstore.web.model.Book;
@@ -43,9 +44,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 
 @RunWith(SpringRunner.class)
-//@DataMongoTest
+@DataMongoTest
 //@WebFluxTest
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+//@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 public class BookStoreIntegrationTests {
 
 	private static final Charset UTF_8 = Charset.forName("UTF-8");
@@ -66,13 +67,13 @@ public class BookStoreIntegrationTests {
 				.build();
 
 		BookStore bookStore = service.createBookStore()
-				.block();
-		service.putBookInStore(bookStore.getId(),
+				.flatMap(bs -> service.putBookInStore(bs.getId(),
 				new Book("978-1617292545", "Spring Boot in Action", "Craig Walls"))
+						.then(service.putBookInStore(bs.getId(),
+				new Book("978-1784393021", "Learning Spring Boot", "Greg L. Turnquist")))
+						.then(Mono.just(bs)))
 				.block();
-		service.putBookInStore(bookStore.getId(),
-				new Book("978-1784393021", "Learning Spring Boot", "Greg L. Turnquist"))
-				.block();
+
 		this.bookStoreId = bookStore.getId();
 	}
 

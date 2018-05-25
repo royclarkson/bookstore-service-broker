@@ -51,8 +51,9 @@ public class BookStore implements Identifiable<String> {
 		return this.books;
 	}
 
-	public void addBook(Book book) {
-		books.add(book);
+	public Mono<Void> addBook(Book book) {
+		return Mono.just(books.add(book))
+				.then();
 	}
 
 	public Mono<Book> getBookById(String bookId) {

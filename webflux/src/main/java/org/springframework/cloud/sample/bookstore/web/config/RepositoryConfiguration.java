@@ -50,6 +50,6 @@ public class RepositoryConfiguration extends AbstractReactiveMongoConfiguration 
 
 	@Override
 	protected String getDatabaseName() {
-		return "reactive-mongo";
+		return "bookstore";
 	}
 }
